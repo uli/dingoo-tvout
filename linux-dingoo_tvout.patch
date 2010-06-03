@@ -1,0 +1,194 @@
+Index: arch/mips/configs/a320_defconfig
+===================================================================
+--- arch/mips/configs/a320_defconfig	(revision 9)
++++ arch/mips/configs/a320_defconfig	(working copy)
+@@ -1,7 +1,7 @@
+ #
+ # Automatically generated make config: don't edit
+ # Linux kernel version: 2.6.24.3
+-# Thu Aug  6 02:10:46 2009
++# Thu Jun  3 22:15:15 2010
+ #
+ CONFIG_MIPS=y
+ 
+@@ -19,6 +19,7 @@
+ # CONFIG_JZ4750D_FUWA1 is not set
+ # CONFIG_JZ4750_APUS is not set
+ # CONFIG_JZ4750D_CETUS is not set
++# CONFIG_JZ4750L_F4750L is not set
+ # CONFIG_MACH_ALCHEMY is not set
+ # CONFIG_BASLER_EXCITE is not set
+ # CONFIG_BCM47XX is not set
+@@ -501,9 +502,45 @@
+ # CONFIG_JZ_POWEROFF is not set
+ # CONFIG_JZ_OW is not set
+ # CONFIG_JZ_TCSM is not set
+-# CONFIG_I2C is not set
++CONFIG_I2C=y
++CONFIG_I2C_BOARDINFO=y
++CONFIG_I2C_CHARDEV=y
+ 
+ #
++# I2C Algorithms
++#
++CONFIG_I2C_ALGOBIT=y
++# CONFIG_I2C_ALGOPCF is not set
++# CONFIG_I2C_ALGOPCA is not set
++
++#
++# I2C Hardware Bus support
++#
++# CONFIG_I2C_JZ47XX is not set
++CONFIG_I2C_GPIO=y
++# CONFIG_I2C_OCORES is not set
++# CONFIG_I2C_PARPORT_LIGHT is not set
++# CONFIG_I2C_SIMTEC is not set
++# CONFIG_I2C_TAOS_EVM is not set
++
++#
++# Miscellaneous I2C Chip support
++#
++# CONFIG_SENSORS_DS1337 is not set
++# CONFIG_SENSORS_DS1374 is not set
++# CONFIG_DS1682 is not set
++# CONFIG_SENSORS_EEPROM is not set
++# CONFIG_SENSORS_PCF8574 is not set
++# CONFIG_SENSORS_PCA9539 is not set
++# CONFIG_SENSORS_PCF8591 is not set
++# CONFIG_SENSORS_MAX6875 is not set
++# CONFIG_SENSORS_TSL2550 is not set
++# CONFIG_I2C_DEBUG_CORE is not set
++# CONFIG_I2C_DEBUG_ALGO is not set
++# CONFIG_I2C_DEBUG_BUS is not set
++# CONFIG_I2C_DEBUG_CHIP is not set
++
++#
+ # SPI support
+ #
+ # CONFIG_SPI is not set
+@@ -559,8 +596,8 @@
+ #
+ CONFIG_FB_JZSOC=y
+ CONFIG_FB_JZ4740_SLCD=y
+-CONFIG_JZ_SLCD_A320_ILI9325=y
+-# CONFIG_JZ_SLCD_A320_ILI9331 is not set
++# CONFIG_JZ_SLCD_A320_ILI9325 is not set
++CONFIG_JZ_SLCD_A320_ILI9331=y
+ # CONFIG_JZ_SLCD_LGDP4551 is not set
+ # CONFIG_JZ_SLCD_SPFD5420A is not set
+ # CONFIG_JZ_SLCD_TRULY is not set
+@@ -648,6 +685,7 @@
+ CONFIG_USB_JZ4740=y
+ # CONFIG_USB_GADGET_JZ4750 is not set
+ # CONFIG_USB_GADGET_JZ4750D is not set
++# CONFIG_USB_GADGET_JZ4750L is not set
+ # CONFIG_USB_GADGET_JZ4730 is not set
+ # CONFIG_USB_GADGET_AMD5536UDC is not set
+ # CONFIG_USB_GADGET_ATMEL_USBA is not set
+Index: drivers/video/jz4740_slcd.c
+===================================================================
+--- drivers/video/jz4740_slcd.c	(revision 9)
++++ drivers/video/jz4740_slcd.c	(working copy)
+@@ -82,6 +82,7 @@
+ };
+ static struct slcd_reg_info reg_buf;
+ static struct lcd_cfb_info *jzslcd_info;
++static unsigned int lcdda;
+ 
+ struct jzfb_info {
+ 	unsigned int cfg;	/* panel mode and pin usage etc. */
+@@ -365,6 +366,14 @@
+ 		REG_DMAC_DCMD(dma_chan)	|= DMAC_DCMD_TIE;
+ 		REG_DMAC_DCMD(dma_chan) &= ~DMAC_DCMD_LINK;
+ 		break;
++        case FBIO_GET_PHYS:
++                if (copy_to_user(argp, &jzslcd_info->fb.fix.smem_start, 4))
++                        return -EFAULT;
++                if (copy_to_user(argp + 4, &jzslcd_info->fb.fix.smem_len, 4))
++                        return -EFAULT;
++                if (copy_to_user(argp + 8, &lcdda, 4))
++                        return -EFAULT;
++                break;
+ 	default:
+ 		break;
+ 	}
+@@ -730,6 +739,7 @@
+ 	struct page * map = NULL;
+ 	unsigned char *tmp;
+ 	unsigned int page_shift, needroom, t;
++	void *lcdda_virt;
+ 
+ 	t = jzfb.bpp;
+ 	if (jzfb.bpp == 15)
+@@ -763,6 +773,12 @@
+ 	cfb->fb.fix.smem_start = virt_to_phys((void *)slcd_frame);
+ 
+ 	cfb->fb.fix.smem_len = (PAGE_SIZE << page_shift);
++	printk("framebuffer at 0x%lx phys, %d bytes\n", cfb->fb.fix.smem_start, cfb->fb.fix.smem_len);
++	lcdda_virt = (void*)__get_free_pages(GFP_KERNEL, 0);
++	map = virt_to_page(lcdda_virt);
++	set_bit(PG_reserved, &map->flags);
++	lcdda = virt_to_phys(lcdda_virt);
++	printk("LCDDA space at 0x%x phys\n", lcdda);
+ 
+ 	cfb->fb.screen_base =
+ 		(unsigned char *)(((unsigned int)slcd_frame & 0x1fffffff) | 0xa0000000);
+Index: drivers/video/jz4740_slcd.h
+===================================================================
+--- drivers/video/jz4740_slcd.h	(revision 9)
++++ drivers/video/jz4740_slcd.h	(working copy)
+@@ -30,9 +30,9 @@
+ #define FBIO_REFRESH_EVENTS	0x468e
+ #define FBIO_DO_REFRESH		0x468f
+ #define FBIO_SET_REG		0x4690
++#define FBIO_GET_PHYS		0x4691
+ 
+ 
+-
+ /*
+  * Dingoo A320 IL9325 specific stuff.
+  * Reverse engineered from A320_PD27_ILI9325_RLS.DL
+Index: drivers/i2c/busses/i2c-gpio.c
+===================================================================
+--- drivers/i2c/busses/i2c-gpio.c	(revision 9)
++++ drivers/i2c/busses/i2c-gpio.c	(working copy)
+@@ -203,6 +203,19 @@
+ {
+ 	int ret;
+ 
++	static struct i2c_gpio_platform_data xy = {
++		.sda_pin = 32*3 + 23,
++		.scl_pin = 32*3 + 24,
++	};
++	static struct platform_device zz = {
++		.name = "i2c-gpio",
++		.id = 0,
++		.dev = {
++			.platform_data = &xy,
++		},
++	};
++	platform_device_register(&zz);
++	
+ 	ret = platform_driver_probe(&i2c_gpio_driver, i2c_gpio_probe);
+ 	if (ret)
+ 		printk(KERN_ERR "i2c-gpio: probe failed: %d\n", ret);
+Index: drivers/i2c/i2c-dev.c
+===================================================================
+--- drivers/i2c/i2c-dev.c	(revision 9)
++++ drivers/i2c/i2c-dev.c	(working copy)
+@@ -423,6 +423,7 @@
+ 	case I2C_TIMEOUT:
+ 		client->adapter->timeout = arg;
+ 		break;
++#if 0
+ 	case I2C_SET_SUB_ADDRESS:
+ 		addr_val = 1;
+ 		sub_addr = arg;
+@@ -430,6 +431,7 @@
+ 	case I2C_SET_CLOCK:
+ 		i2c_jz_setclk(arg);
+ 		break;
++#endif
+ 
+ 	default:
+ 		/* NOTE:  returning a fault code here could cause trouble
