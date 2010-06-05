@@ -43,6 +43,7 @@ unsigned int *gpio;
 unsigned int *io;
 int fbd;
 struct fb_phys fb_info;
+int debug = 0;
 
 /* set a register on the Chrontel TV encoder */
 void i2c(int addr, int val)
@@ -186,7 +187,9 @@ void map_io(void)
 {
   fbd = open("/dev/fb0", O_RDWR);
   ioctl(fbd, FBIO_GET_PHYS, &fb_info);
-  fprintf(stderr,"FB at 0x%x, len %d, LCDDA at 0x%x\n", fb_info.fb_phys, fb_info.fb_len, fb_info.lcdd_phys);
+  
+  if (debug)
+    fprintf(stderr,"FB at 0x%x, len %d, LCDDA at 0x%x\n", fb_info.fb_phys, fb_info.fb_len, fb_info.lcdd_phys);
   
   int mem = open("/dev/mem", O_RDWR);
   if (!mem) {
@@ -236,8 +239,9 @@ void lcdc_on(int pal)
   unsigned int old_cpccr = cpm[0];
   unsigned int old_cppcr = cpm[0x10/4];
   unsigned int old_lpcdr = cpm[0x64/4];
-  fprintf(stderr,"cpccr 0x%x cppcr 0x%x lpcdr 0x%x\n", old_cpccr, old_cppcr, old_lpcdr);
-
+  
+  if (debug)
+    fprintf(stderr,"cpccr 0x%x cppcr 0x%x lpcdr 0x%x\n", old_cpccr, old_cppcr, old_lpcdr);
     
   cpm[0] = 0x40432220; //|= 0x10000;
   cpm[0x10/4] = 0x1b000520;
@@ -294,6 +298,8 @@ int main(int argc, char **argv)
     else if (!strcmp(argv[1], "ntsc")) pal = 0;
     else if (!strcmp(argv[1], "off")) tvon = 0;
   }
+  if (argc > 2 && !strcmp(argv[2], "debug"))
+    debug = 1;
   
   map_io();
 
@@ -306,20 +312,19 @@ int main(int argc, char **argv)
   }
   else {
     if (!(lcd[0] & 0x80000000)) {
-      fprintf(stderr,"SHUTTING DOWN!\n");
+      if (debug) fprintf(stderr,"SHUTTING DOWN!\n");
       lcdc_off();
       slcd_on();
     }
   }
   
   int i;
-#if 1
-  for (i = 0; i < 0x60; i+=4) {
+
+  if (debug) for (i = 0; i < 0x60; i+=4) {
     fprintf(stderr, "0x%x: 0x%x\n", 0x13050000 + i, lcd[i/4]);
   }
-#endif
 
-  if (argc > 2 && !strcmp(argv[2], "debug")) {
+  if (debug) {
     char addr[20], val[20], action[5];
     for(;;) {
       fscanf(stdin, "%s %s %s", action, addr, val);
