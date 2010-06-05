@@ -36,15 +36,18 @@ Known problems:
 - Occasionally, the timing appears to be off, and the picture is shifted
   horizontally. This may be due to incorrect order of initialization of the
   LCDC. Unfortunately, only rebooting seems to fix it.
+- Enabling the TV output without a TV connected seems to upset the TV
+  encoder.
 - Sound on the internal speakers is not turned off when TV output is
   enabled.
 
 Things that are technically possible, but not (yet) implemented:
-- Higher resolutions. The LCD controller supports up to 800x600, but this
-  would definitely require putting the whole show in the kernel (where it
-  belongs anyway).
+- Higher resolutions. The LCD controller supports up to 800x600, and the TV
+  encoder up to 720x576.  This, however, would definitely require putting
+  the whole show in the kernel (where it belongs anyway). 
 - Hue/contrast/saturation/brightness/sharpness settings and repositioning of
   the on-screen picture.
+- Detecting whether a TV set is connected.
 
 Things that are not technically possible:
 - Dual-head operation. While the SLCD, being the smart device that it is,
