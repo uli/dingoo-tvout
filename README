@@ -36,8 +36,9 @@ Known problems:
 - Occasionally, the timing appears to be off, and the picture is shifted
   horizontally. This may be due to incorrect order of initialization of the
   LCDC. Unfortunately, only rebooting seems to fix it.
-- Enabling the TV output without a TV connected seems to upset the TV
-  encoder.
+- Sometimes, when enabling TV output after a power cycle, the screen is
+  completely garbled, with the correct picture occasionally popping up
+  between periods of noise. After a warm reboot, things work fine.
 - Sound on the internal speakers is not turned off when TV output is
   enabled.
 
