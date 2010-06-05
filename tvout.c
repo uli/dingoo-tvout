@@ -44,6 +44,7 @@ unsigned int *io;
 int fbd;
 struct fb_phys fb_info;
 
+/* set a register on the Chrontel TV encoder */
 void i2c(int addr, int val)
 {
   char cmd[80];
@@ -51,67 +52,134 @@ void i2c(int addr, int val)
   system(cmd);
 }
 
+/* Enable the TV encoder.
+   Set pal to non-zero for PAL encoding; default is NTSC.
+   These are for the most part the values the native Dingoo firmware
+   programs the TV encoder with.  Some of them sound patently absurd, but
+   still work.
+ */
 void ctel_on(int pal)
 {
-  i2c(4, 0xc1); /* disable DAC, power down */
+  i2c(4, 0xc1); /* Power State: disable DACs, power down */
 
   if (pal)
-    i2c(0xa, 0x13);
+    i2c(0xa, 0x13);     /* Video Output Format: TV_BP = 0 (scaler on),
+                           SVIDEO = 0 (composite output), DACSW = 01 (CVBS),
+                           VOS = 0011 (PAL- B/D/G/H/K/I) */
   else
-    i2c(0xa, 0x10);
+    i2c(0xa, 0x10);	/* same as above, except VOS = 0000 (NTSC-M) */
 
-  i2c(0xb, 3);
-  i2c(0xd, 3);
-  i2c(0xe, 0);
+  i2c(0xb, 3);  /* Crystal Control: XTALSEL = 0 (use predefined frequency),
+                   XTAL = 0011 (12 MHz) */
 
+  i2c(0xd, 3);  /* Input Data Format 2: HIGH = 0, REVERSE = 0, SWAP = 0 (in
+                   short: leave data as it is), IDF = 011 (input data
+                   RGB565) */
+
+  i2c(0xe, 0);	/* SYNC Control: POUTEN = 0 (no signal on POUT), DES (no
+                   embedded sync in data), FLDSEN = 0 (no field select),
+                   FLDS = 0 (ignored if FLDSEN = 0), HPO = 0 (negative
+                   HSYNC), VPO = 0 (negative VSYNC), SYO = 0 (input sync),
+                   DIFFEN = 0 (CMOS input) */
+
+  /* These timings are the ones the native Dingoo firmware uses; the HTI values make
+     no sense to me because they don't match the actual pixels encoded (858
+     for NTSC, 864 for PAL) according to the datasheet.  We might want to
+     try if simply turning on HVAUTO and skipping all this works, too...
+   */
   if (pal) {
+    /* Input Timing: HVAUTO = 0 (timing from HTI, HAI),
+       HTI (input horizontal total pixels) = 0x36c (876),
+       HAI (input horizontal active pixels) = 0x140 (320)
+     */
     i2c(0x11, 0x19);
+    /* Input Timing Register 2 (0x12) defaults to 0x40 */
     i2c(0x13, 0x6c);
   }
   else {
+    /* Input Timing:
+       HTI = 0x2e0 (736),
+       HAI = 0x140 (320)
+     */
     i2c(0x11, 0x11);
+    /* Input Timing Register 2 (0x12) defaults to 0x40 */
     i2c(0x13, 0xe0);
   }
-
+  
+  /* HW (HSYNC pulse width) and HO (HSYNC offset) are left at their
+     defaults (2 and 4, respectively)
+   */
+  /* Input Timing Register 4 (0x14) defaults to 0 */
+  /* Input Timing Register 5 (0x15) defaults to 4 */
+  /* Input Timing Register 6 (0x16) defaults to 2 */
+  
+  /* VO (VSYNC offset) = 4,
+     VTI (input vertical total pixels) = 530 (PAL), 528 (NTSC),
+     VAI (input vertical active pixels) = 240
+   */
   i2c(0x17, 4);
-
+  /* Input Timing Register 8 (0x18) defaults to 0xf0 */
   if (pal)
     i2c(0x19, 0x12);
   else
     i2c(0x19, 0x10);
+  /* Input Timing Register 10 (0x1a) defaults to 4 */
 
+  /* TVHA (TV output horizontal active pixels) = 1345 (WTF??) */
+  /* Output Timing Register 1 (0x1e) defaults to 5 */
   i2c(0x1f, 0x41);
 
+  /* VP (vertical position) = 512, i.e. no adjustment;
+     PCLK clock divider remains at default value (67108864).
+   */
   if (pal) {
+    /* HP (horizontal position) = 503, i.e. adjust -9 pixels */
     i2c(0x23, 0x7a);
+    /* UCLK clock divider: numerator 1932288... */
     i2c(0x28, 0x1d);
     i2c(0x29, 0x7c);
     i2c(0x2a, 0);
+    /* ...denominator 2160000 */
     i2c(0x2b, 0x20);
     i2c(0x2c, 0xf5);
     i2c(0x2d, 0x80);
   }
   else {
+    /* HP (horizontal position) for NTSC = 508, i.e. adjust -4 pixels */
     i2c(0x23, 0x7f);
+    /* UCLK clock divider: numerator 1597504... */
     i2c(0x28, 0x18);
     i2c(0x29, 0x60);
     i2c(0x2a, 0x40);
+    /* ...denominator 1801800 */
     i2c(0x2b, 0x1b);
     i2c(0x2c, 0x7e);
     i2c(0x2d, 0x48);
   }
-  i2c(0x2e, 0x38);
-  i2c(0x30, 0x12);
-  i2c(0x31, 0x13);
-  i2c(0x33, 0);
-  i2c(0x39, 0x12);
-  i2c(0x63, 0xc2);
-  i2c(4, 0);	/* enable DAC, power up */
+  i2c(0x2e, 0x38); /* clock divider integer register (M value for PLL) */
+
+  /* PLL ratio */
+  /* PLL Ratio Register 1 defaults to 0x12, PLL1 and PLL2 pre-dividers = 2 */
+  i2c(0x30, 0x12); /* PLL3 pre-divider and post-divider 1 = 2 */
+  i2c(0x31, 0x13); /* PLL3 post-divider 2 = 3 */
+  
+  /* FSCISPP (sub-carrier frequency adjustment) remains at 0 */
+  /* FSCI Adjustment Register 1 defaults to 0 */
+  i2c(0x33, 0);	/* FIXME: This actually is a default value, too. */
+  
+  i2c(0x39, 0x12); /* FIXME: This looks completely bogus. I don't see it in
+                      any dumps, and it isn't even documented.  Should
+                      probably be removed. */
+
+  i2c(0x63, 0xc2); /* SEL_R = 1 (double termination) */
+
+  i2c(4, 0);	/* enable DACs, power up; FIXME: I think the first DAC is
+                   enough for us. */
 }
 
 void ctel_off(void)
 {
-  i2c(4, 0xc1);
+  i2c(4, 0xc1);	/* disable DACs, power down */
 }
 
 void map_io(void)
