@@ -23,13 +23,18 @@ Requirements:
   report whether it works.
 - A kernel with working I2C support.  You should be able to get a kernel
   patch and a pre-built zImage for ILI9331 (the only display I have) at the
-  same place you got this from (http://github.com/uli/dingoo-tvout)
+  same place you got this from (http://github.com/uli/dingoo-tvout).
 
-Usage:
-  tvout [pal|ntsc|off] [debug]
+Usage: tvout [OPTION...]
 
-Running tvout with "pal" or "ntsc" enables TV output using the respective
-system.  Running it with "off" turns off TV output and returns to the
+  --ntsc	output NTSC-M signal
+  --pal		output PAL-B/D/G/H/K/I signal
+  --off		turn off TV output and re-enable the SLCD
+  --debug	print debug output to stderr
+  --help	display this help and exit
+
+Running tvout with "--pal" or "--ntsc" enables TV output using the respective
+system.  Running it with "--off" turns off TV output and returns to the
 built-in LCD display.
 
 Known problems:

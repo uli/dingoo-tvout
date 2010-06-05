@@ -293,14 +293,28 @@ int main(int argc, char **argv)
 {
   int tvon = 1;
   int pal = 0;
-  if (argc > 1) {
-    if (!strcmp(argv[1], "pal")) pal = 1;
-    else if (!strcmp(argv[1], "ntsc")) pal = 0;
-    else if (!strcmp(argv[1], "off")) tvon = 0;
+  for (; argc > 1; argc--, argv++) {
+    if (!strcmp(argv[1], "--pal")) pal = 1;
+    else if (!strcmp(argv[1], "--ntsc")) pal = 0;
+    else if (!strcmp(argv[1], "--off")) tvon = 0;
+    else if (!strcmp(argv[1], "--debug")) debug = 1;
+    else if (!strcmp(argv[1], "--help")) {
+      fprintf(stderr,
+        "Usage: tvout [OPTION...]\n"
+        "\n"
+        "  --ntsc        output NTSC-M signal\n"
+        "  --pal         output PAL-B/D/G/H/K/I signal\n"
+        "  --off         turn off TV output and re-enable the SLCD\n"
+        "  --debug       print debug output to stderr\n"
+        "  --help        display this help and exit\n");
+      return 0;
+    }
+    else {
+      fprintf(stderr, "Unknown option %s\n", argv[1]);
+      return 1;
+    }
   }
-  if (argc > 2 && !strcmp(argv[2], "debug"))
-    debug = 1;
-  
+
   map_io();
 
   ctel_off();
