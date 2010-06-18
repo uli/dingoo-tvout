@@ -26,16 +26,7 @@
 #include <unistd.h>
 #include "cpu.h"
 
-#define FBIODISPON 0x4689
-#define FBIO_REFRESH_ALWAYS     0x468d
-#define FBIO_REFRESH_EVENTS     0x468e
-#define FBIO_GET_PHYS 0x4691
-
-struct fb_phys {
-  unsigned int fb_phys;
-  unsigned int fb_len;
-  unsigned int lcdd_phys;
-};
+#define FBIOA320TVOUT	0x46F0
 
 volatile unsigned int *lcd;
 unsigned int *lcdd;
@@ -43,14 +34,13 @@ unsigned int *cpm;
 unsigned int *gpio;
 unsigned int *io;
 int fbd;
-struct fb_phys fb_info;
 int debug = 0;
 
 /* set a register on the Chrontel TV encoder */
 void i2c(int addr, int val)
 {
   char cmd[80];
-  sprintf(cmd, "i2cset -y i2c-gpio0 0x76 0x%x 0x%x", addr, val);
+  sprintf(cmd, "i2cset -y i2c-gpio-1 0x76 0x%x 0x%x", addr, val);
   system(cmd);
 }
 
@@ -187,10 +177,6 @@ void ctel_off(void)
 void map_io(void)
 {
   fbd = open("/dev/fb0", O_RDWR);
-  ioctl(fbd, FBIO_GET_PHYS, &fb_info);
-  
-  if (debug)
-    fprintf(stderr,"FB at 0x%x, len %d, LCDDA at 0x%x\n", fb_info.fb_phys, fb_info.fb_len, fb_info.lcdd_phys);
   
   int mem = open("/dev/mem", O_RDWR);
   if (!mem) {
@@ -201,11 +187,6 @@ void map_io(void)
   if (!lcd) {
     perror("lcd");
     exit(2);
-  }
-  lcdd = mmap(0, 0x10, PROT_READ|PROT_WRITE, MAP_SHARED, mem, fb_info.lcdd_phys);
-  if (!lcdd) {
-    perror("lcdd");
-    exit(3);
   }
   cpm = mmap(0, 0x78, PROT_READ|PROT_WRITE, MAP_SHARED, mem, 0x10000000);
   if (!cpm) {
@@ -224,72 +205,14 @@ void map_io(void)
   }
 }
 
-void slcd_off(void)
-{
-    ioctl(fbd, FBIO_REFRESH_EVENTS);
-}
-
-void slcd_on(void)
-{
-  ioctl(fbd, FBIODISPON);
-  ioctl(fbd, FBIO_REFRESH_ALWAYS);
-}
-
 void lcdc_on(int pal, int clock)
 {
-  unsigned int old_cpccr = cpm[0];
-  unsigned int old_cppcr = cpm[0x10/4];
-  unsigned int old_lpcdr = cpm[0x64/4];
-  
-  if (debug)
-    fprintf(stderr,"cpccr 0x%x cppcr 0x%x lpcdr 0x%x\n", old_cpccr, old_cppcr, old_lpcdr);
-    
-  cpm[0] = 0x40432220; //|= 0x10000;
-  cpm[0x64/4] = 0xd;
-  cpm[0x10/4] = 0x1b000520;
-    
-  jz_cpuspeed(clock);
-
-  lcdd[0] = fb_info.lcdd_phys; // pointing to ourself is what the specs tell us to do for a single screen
-  lcdd[1] = fb_info.fb_phys; // framebuffer address
-  lcdd[2] = 0xdeadbeef; /* user data; we don't use it */
-  lcdd[3] = 0xc0009600; /* interrupts on, 153600 bytes buffer length */
-  
-  lcd[0/4] = 0x900;
-  lcd[4/4] = 0xa;
-
-  if (pal) {
-    lcd[8/4] = 0x7d;
-    lcd[0xc/4] = 0x036c0112;
-    lcd[0x10/4] = 0x02240364;
-    lcd[0x14/4] = 0x1b010b;
-  }
-  else {
-    lcd[8/4] = 0x3c;
-    lcd[0xc/4] = 0x02e00110;
-    lcd[0x10/4] = 0x019902d9;
-    lcd[0x14/4] = 0x1d010d;
-  }
-    
-  lcd[0x18/4] = 0;
-  lcd[0x1c/4] = 0;
-  lcd[0x20/4] = 0;
-  lcd[0x24/4] = 0;
-  lcd[0x34/4] = 0; // reset status register
-  
-  gpio[0x214/4] = 0x200000;
-  gpio[0x228/4] = 0x020000;
-  gpio[0x234/4] = 0x280000;
-  gpio[0x244/4] = 0x080000;
-  gpio[0x264/4] = 0x200000;
-  
-  lcd[0x40/4] = fb_info.lcdd_phys; // lcd descriptor address
-  lcd[0x30/4] = 0x2000000c;// | 0x3f80;	// 16-word burst length, enabled, 15/16 bpp (and mask all interrupts)
+  ioctl(fbd, FBIOA320TVOUT, 1 + pal);
 }
 
 void lcdc_off(void)
 {
-  lcd[0] = 0x80000000;
+  ioctl(fbd, FBIOA320TVOUT, 0);
 }
 
 int main(int argc, char **argv)
@@ -329,7 +252,6 @@ int main(int argc, char **argv)
   ctel_off();
     
   if (tvon) {
-    slcd_off();
     lcdc_on(pal, clock);
     ctel_on(pal);
   }
@@ -337,7 +259,6 @@ int main(int argc, char **argv)
     if (!(lcd[0] & 0x80000000)) {
       if (debug) fprintf(stderr,"SHUTTING DOWN!\n");
       lcdc_off();
-      slcd_on();
     }
   }
   
