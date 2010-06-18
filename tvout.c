@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
+#include "cpu.h"
 
 #define FBIODISPON 0x4689
 #define FBIO_REFRESH_ALWAYS     0x468d
@@ -234,7 +235,7 @@ void slcd_on(void)
   ioctl(fbd, FBIO_REFRESH_ALWAYS);
 }
 
-void lcdc_on(int pal)
+void lcdc_on(int pal, int clock)
 {
   unsigned int old_cpccr = cpm[0];
   unsigned int old_cppcr = cpm[0x10/4];
@@ -243,9 +244,7 @@ void lcdc_on(int pal)
   if (debug)
     fprintf(stderr,"cpccr 0x%x cppcr 0x%x lpcdr 0x%x\n", old_cpccr, old_cppcr, old_lpcdr);
     
-  cpm[0] = 0x40432220; //|= 0x10000;
-  cpm[0x10/4] = 0x1b000520;
-  cpm[0x64/4] = 0xd;
+  jz_cpuspeed(clock);
 
   lcdd[0] = fb_info.lcdd_phys; // pointing to ourself is what the specs tell us to do for a single screen
   lcdd[1] = fb_info.fb_phys; // framebuffer address
@@ -293,11 +292,16 @@ int main(int argc, char **argv)
 {
   int tvon = 1;
   int pal = 0;
+  int clock = 336;
   for (; argc > 1; argc--, argv++) {
     if (!strcmp(argv[1], "--pal")) pal = 1;
     else if (!strcmp(argv[1], "--ntsc")) pal = 0;
     else if (!strcmp(argv[1], "--off")) tvon = 0;
     else if (!strcmp(argv[1], "--debug")) debug = 1;
+    else if (!strcmp(argv[1], "--speed")) {
+      argc--; argv++;
+      clock = atoi(argv[1]);
+    }
     else if (!strcmp(argv[1], "--help")) {
       fprintf(stderr,
         "Usage: tvout [OPTION...]\n"
@@ -305,6 +309,7 @@ int main(int argc, char **argv)
         "  --ntsc        output NTSC-M signal\n"
         "  --pal         output PAL-B/D/G/H/K/I signal\n"
         "  --off         turn off TV output and re-enable the SLCD\n"
+        "  --speed N     set system clock to N MHz (default: 336)\n"
         "  --debug       print debug output to stderr\n"
         "  --help        display this help and exit\n");
       return 0;
@@ -321,7 +326,7 @@ int main(int argc, char **argv)
     
   if (tvon) {
     slcd_off();
-    lcdc_on(pal);
+    lcdc_on(pal, clock);
     ctel_on(pal);
   }
   else {
