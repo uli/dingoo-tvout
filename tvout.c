@@ -244,6 +244,10 @@ void lcdc_on(int pal, int clock)
   if (debug)
     fprintf(stderr,"cpccr 0x%x cppcr 0x%x lpcdr 0x%x\n", old_cpccr, old_cppcr, old_lpcdr);
     
+  cpm[0] = 0x40432220; //|= 0x10000;
+  cpm[0x64/4] = 0xd;
+  cpm[0x10/4] = 0x1b000520;
+    
   jz_cpuspeed(clock);
 
   lcdd[0] = fb_info.lcdd_phys; // pointing to ourself is what the specs tell us to do for a single screen
