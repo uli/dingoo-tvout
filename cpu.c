@@ -3,6 +3,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <string.h>
 #include "cpu.h"
 #include "jz4740.h"
 
@@ -87,20 +88,29 @@ void pll_init(unsigned int clock)
 
 void jz_cpuspeed(unsigned clockspeed) 
 {
-	if (clockspeed >= 200 && clockspeed <= 432)
+	if (clockspeed >= 192 && clockspeed <= 432)
 	{
-		jz_dev = open("/dev/mem", O_RDWR);  
-		if(jz_dev)
-		{
-			jz_cpmregl=(unsigned long  *)mmap(0, 0x80, PROT_READ|PROT_WRITE, MAP_SHARED, jz_dev, 0x10000000);
-			jz_emcregl=(unsigned long  *)mmap(0, 0x90, PROT_READ|PROT_WRITE, MAP_SHARED, jz_dev, 0x13010000);
-			jz_emcregs=(unsigned short *)jz_emcregl;
-			pll_init(clockspeed*1000000);
-			munmap((void *)jz_cpmregl, 0x80); 
-			munmap((void *)jz_emcregl, 0x90); 	
-			close(jz_dev);
-		}
-		else
-			printf("failed opening /dev/mem \n");
+	        jz_dev = open("/sys/devices/system/cpu/cpu0/cpufreq/scaling_setspeed", O_RDWR);
+	        if (jz_dev) {
+	                char freq[7];
+	                sprintf(freq, "%d", clockspeed * 1000);
+	                write(jz_dev, freq, strlen(freq));
+	                close(jz_dev);
+	        }
+	        else {
+                        jz_dev = open("/dev/mem", O_RDWR);  
+                        if(jz_dev)
+                        {
+                                jz_cpmregl=(unsigned long  *)mmap(0, 0x80, PROT_READ|PROT_WRITE, MAP_SHARED, jz_dev, 0x10000000);
+                                jz_emcregl=(unsigned long  *)mmap(0, 0x90, PROT_READ|PROT_WRITE, MAP_SHARED, jz_dev, 0x13010000);
+                                jz_emcregs=(unsigned short *)jz_emcregl;
+                                pll_init(clockspeed*1000000);
+                                munmap((void *)jz_cpmregl, 0x80); 
+                                munmap((void *)jz_emcregl, 0x90); 	
+                                close(jz_dev);
+                        }
+                        else
+                                printf("failed opening /dev/mem \n");
+                }
 	}
 }

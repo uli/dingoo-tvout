@@ -207,6 +207,8 @@ void map_io(void)
 
 void lcdc_on(int pal, int clock)
 {
+  if (clock != -1)
+    jz_cpuspeed(clock);
   ioctl(fbd, FBIOA320TVOUT, 1 + pal);
 }
 
@@ -219,7 +221,7 @@ int main(int argc, char **argv)
 {
   int tvon = 1;
   int pal = 0;
-  int clock = 336;
+  int clock = -1;
   for (; argc > 1; argc--, argv++) {
     if (!strcmp(argv[1], "--pal")) pal = 1;
     else if (!strcmp(argv[1], "--ntsc")) pal = 0;
@@ -236,7 +238,7 @@ int main(int argc, char **argv)
         "  --ntsc        output NTSC-M signal\n"
         "  --pal         output PAL-B/D/G/H/K/I signal\n"
         "  --off         turn off TV output and re-enable the SLCD\n"
-        "  --speed N     set system clock to N MHz (default: 336)\n"
+        "  --speed N     change system clock to N MHz\n"
         "  --debug       print debug output to stderr\n"
         "  --help        display this help and exit\n");
       return 0;
